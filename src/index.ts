@@ -27,7 +27,8 @@ export { SchemaSerializer } from './serializer/SchemaSerializer';
 // Utilities
 export { Clock, Delayed };
 export { nonenumerable as nosync } from 'nonenumerable'; // TODO: remove me on 1.0.0 (FossilDelta stuff)
-export { generateId, Deferred } from './Utils';
+// jyhan
+export { generateId, Deferred, generateProcessId } from './Utils';
 
 // Default rooms
 export { LobbyRoom } from './rooms/LobbyRoom';

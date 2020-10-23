@@ -16,6 +16,7 @@ import { MatchMakerDriver, RoomListingData } from './matchmaker/drivers/Driver';
 import { LocalDriver } from './matchmaker/drivers/LocalDriver';
 import { Client } from './transport/Transport';
 import { Type } from './types';
+import ip from "internal-ip";
 
 export { MatchMakerDriver };
 
@@ -32,12 +33,18 @@ const rooms: {[roomId: string]: Room} = {};
 export let processId: string;
 export let presence: Presence;
 export let driver: MatchMakerDriver;
+// jyhan
+export let serverIp
+export let serverPort
 
 let isGracefullyShuttingDown: boolean;
 
 export function setup(_presence?: Presence, _driver?: MatchMakerDriver, _processId?: string) {
   presence = _presence || new LocalPresence();
   driver = _driver || new LocalDriver();
+  // jyhan
+  serverIp = ip.v4.sync()
+  serverPort = process.env.GAMESERVER_PORT
   processId = _processId;
   isGracefullyShuttingDown = false;
 
@@ -268,6 +275,9 @@ async function handleCreateRoom(roomName: string, clientOptions: ClientOptions):
   room.listing = driver.createInstance({
     name: roomName,
     processId,
+    // jyhan
+    serverIp,
+    serverPort,
     ...registeredHandler.getFilterOptions(clientOptions),
   });
 

@@ -1,12 +1,19 @@
 import nanoid from 'nanoid';
 
 import { debugAndPrintError } from './Debug';
+import ip from "internal-ip";
 
 // remote room call timeouts
 export const REMOTE_ROOM_SHORT_TIMEOUT = Number(process.env.COLYSEUS_PRESENCE_SHORT_TIMEOUT || 2000);
 
 export function generateId(length: number = 9) {
   return nanoid(length);
+}
+
+// jyhan
+export function generateProcessId() {
+  const ipv4 = ip.v4.sync().replace(/\./g,'_')
+  return `${ipv4}-${process.env.GAMESERVER_PORT}`;
 }
 
 //

@@ -10,6 +10,9 @@ export interface RoomListingData<Metadata= any> {
   processId: string;
   roomId: string;
   unlisted: boolean;
+  // jyhan
+  serverIp: string;
+  serverPort: number;
 
   updateOne(operations: any);
   save();
