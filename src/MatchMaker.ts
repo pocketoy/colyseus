@@ -17,6 +17,7 @@ import { LocalDriver } from './matchmaker/drivers/LocalDriver';
 import { Client } from './transport/Transport';
 import { Type } from './types';
 import ip from "internal-ip";
+import {RoomCache} from "./matchmaker/drivers/LocalDriver/RoomData";
 
 export { MatchMakerDriver };
 
@@ -257,7 +258,7 @@ export async function createRoom(roomName: string, clientOptions: ClientOptions)
   }
 }
 
-async function handleCreateRoom(roomName: string, clientOptions: ClientOptions): Promise<RoomListingData> {
+async function handleCreateRoom(roomName: string, clientOptions: ClientOptions): Promise<RoomListingData|RoomCache> {
   const registeredHandler = handlers[roomName];
 
   if (!registeredHandler) {

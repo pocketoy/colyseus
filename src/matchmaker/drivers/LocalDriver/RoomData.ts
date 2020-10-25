@@ -12,6 +12,9 @@ export class RoomCache implements RoomListingData {
   public roomId: string;
   public createdAt: Date;
   public unlisted: boolean = false;
+  // jyhan
+  public serverIp: string;
+  public serverPort: number;
 
   private $rooms: RoomCache[];
 

@@ -20,6 +20,7 @@ import { ServerError } from './errors/ServerError';
 import { RoomListingData } from './matchmaker/drivers/Driver';
 import { FossilDeltaSerializer } from './serializer/FossilDeltaSerializer';
 import { Client, ClientState, ISendOptions } from './transport/Transport';
+import {RoomCache} from "./matchmaker/drivers/LocalDriver/RoomData";
 
 const DEFAULT_PATCH_RATE = 1000 / 20; // 20fps (50ms)
 const DEFAULT_SIMULATION_INTERVAL = 1000 / 60; // 60fps (16.66ms)
