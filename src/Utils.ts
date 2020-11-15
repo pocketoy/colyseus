@@ -12,8 +12,13 @@ export function generateId(length: number = 9) {
 
 // jyhan
 export function generateProcessId() {
-  const ipv4 = ip.v4.sync().replace(/\./g,'_')
-  return `${ipv4}-${process.env.GAMESERVER_PORT}`;
+  const ipv4 = ip.v4.sync()//.replace(/\./g,'_')
+  const port = process.env.RUN_WEB_SERVER ?
+    (process.env.WEB_PORT || 80) :
+    (process.env.COLYSEUS_PORT || process.env.WEB_PORT || 80)
+  const processId = `${ipv4}:${port}`
+  console.log(processId)
+  return processId;
 }
 
 //

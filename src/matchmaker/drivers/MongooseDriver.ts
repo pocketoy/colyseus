@@ -52,9 +52,6 @@ export class MongooseDriver implements MatchMakerDriver {
       metadata: true,
       name: true,
       roomId: true,
-      // jyhan
-      serverIp: true,
-      serverPort: true,
       ...additionalProjectionFields,
     })) as any as RoomListingData[];
   }
@@ -65,10 +62,6 @@ export class MongooseDriver implements MatchMakerDriver {
       locked: 1,
       processId: 1,
       roomId: 1,
-      // jyhan
-      name: 1,
-      serverIp: 1,
-      serverPort: 1,
     })) as any as QueryHelpers<RoomListingData>;
   }
 

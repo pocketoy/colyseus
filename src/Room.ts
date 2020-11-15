@@ -301,10 +301,14 @@ export abstract class Room<State= any, Metadata= any> {
   public async ['_onJoin'](client: Client, req?: http.IncomingMessage) {
     const sessionId = client.sessionId;
 
+    /*
+    // jyhan
+    // reserve 없이도 접속 가능하도록 변경
     if (this.reservedSeatTimeouts[sessionId]) {
       clearTimeout(this.reservedSeatTimeouts[sessionId]);
       delete this.reservedSeatTimeouts[sessionId];
     }
+     */
 
     // clear auto-dispose timeout.
     if (this._autoDisposeTimeout) {
@@ -313,8 +317,12 @@ export abstract class Room<State= any, Metadata= any> {
     }
 
     // get seat reservation options and clear it
+    /*
+    // jyhan
+    // reserve 없이도 접속 가능하도록 변경
     const options = this.reservedSeats[sessionId];
     delete this.reservedSeats[sessionId];
+     */
 
     // bind clean-up callback when client connection closes
     client.ref.once('close', this._onLeave.bind(this, client));

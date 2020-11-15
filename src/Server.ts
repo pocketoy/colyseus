@@ -1,27 +1,26 @@
-import http, { IncomingMessage, ServerResponse } from 'http';
+import http, {IncomingMessage, ServerResponse} from 'http';
 import net from 'net';
-import WebSocket from 'ws';
-import { ServerOptions as IServerOptions } from 'ws';
+import WebSocket, {ServerOptions as IServerOptions} from 'ws';
 
-import { debugAndPrintError, debugMatchMaking } from './Debug';
+import {debugAndPrintError, debugMatchMaking} from './Debug';
 import * as matchMaker from './MatchMaker';
-import { RegisteredHandler } from './matchmaker/RegisteredHandler';
-import { Presence } from './presence/Presence';
+import {RegisteredHandler} from './matchmaker/RegisteredHandler';
+import {Presence} from './presence/Presence';
 
-import { Room } from './Room';
-import { Type } from './types';
-import { registerGracefulShutdown } from './Utils';
+import {Room} from './Room';
+import {Type} from './types';
+import {generateProcessId, registerGracefulShutdown} from './Utils';
 
-import { generateId } from '.';
-import { registerNode, unregisterNode } from './discovery';
-import { LocalPresence } from './presence/LocalPresence';
+import {generateId} from '.';
+import {registerNode, unregisterNode} from './discovery';
+import {LocalPresence} from './presence/LocalPresence';
 
-import { ServerError } from './errors/ServerError';
-import { ErrorCode, Protocol } from './Protocol';
-import { Transport } from './transport/Transport';
+import {ServerError} from './errors/ServerError';
+import {ErrorCode} from './Protocol';
+import {Transport} from './transport/Transport';
 
-import { TCPTransport } from './transport/TCP/TCPTransport';
-import { WebSocketTransport } from './transport/WebSocket/WebSocketTransport';
+import {TCPTransport} from './transport/TCP/TCPTransport';
+import {WebSocketTransport} from './transport/WebSocket/WebSocketTransport';
 
 export type ServerOptions = IServerOptions & {
   pingInterval?: number,
@@ -54,14 +53,14 @@ export class Server {
   public transport: Transport;
 
   protected presence: Presence;
-  protected processId: string = generateId();
+  protected processId: string = generateProcessId();
   protected route = '/matchmake';
 
   private exposedMethods = ['joinOrCreate', 'create', 'join', 'joinById'];
   private allowedRoomNameChars = /([a-zA-Z_\-0-9]+)/gi;
 
   constructor(options: ServerOptions = {}) {
-    const { gracefullyShutdown = true } = options;
+    const {gracefullyShutdown = true} = options;
 
     this.presence = options.presence || new LocalPresence();
 
@@ -79,7 +78,9 @@ export class Server {
   }
 
   public attach(options: ServerOptions) {
-    if (!options.server) { options.server = http.createServer(); }
+    if (!options.server) {
+      options.server = http.createServer();
+    }
     options.server.once('listening', () => this.registerProcessForDiscovery());
 
     this.attachMatchMakingRoutes(options.server);
@@ -141,6 +142,7 @@ export class Server {
   }
 
   public async gracefullyShutdown(exit: boolean = true, err?: Error) {
+    console.log('GRACEFULLY SHUTDOWN !!!')
     await unregisterNode(this.presence, {
       port: this.transport.address().port,
       processId: this.processId,
@@ -174,7 +176,7 @@ export class Server {
     /* tslint:disable:no-string-literal */
     const _onMessage = Room.prototype['_onMessage'];
     /* tslint:disable:no-string-literal */
-    Room.prototype['_onMessage'] = function(...args: any[]) {
+    Room.prototype['_onMessage'] = function (...args: any[]) {
       setTimeout(() => _onMessage.apply(this, args), halfwayMS);
     };
   }
