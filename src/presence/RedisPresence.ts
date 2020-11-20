@@ -23,9 +23,17 @@ export class RedisPresence implements Presence {
     protected incrAsync: any;
     protected decrAsync: any;
 
-    constructor(opts?: redis.ClientOpts) {
+    // jyhan
+    public clientAsync: any;
+
+    constructor(opts?: redis.ClientOpts, client_name?) {
         this.sub = redis.createClient(opts);
         this.pub = redis.createClient(opts);
+
+        if ( client_name ) {
+          this.sub.client('SETNAME', client_name)
+          this.pub.client('SETNAME', client_name)
+        }
 
         // no listener limit
         this.sub.setMaxListeners(0);
@@ -44,6 +52,9 @@ export class RedisPresence implements Presence {
         this.pubsubAsync = promisify(this.pub.pubsub).bind(this.pub);
         this.incrAsync = promisify(this.pub.incr).bind(this.pub);
         this.decrAsync = promisify(this.pub.decr).bind(this.pub);
+
+        // jyhan
+        this.clientAsync = promisify(this.pub.client).bind(this.pub);
     }
 
     public async subscribe(topic: string, callback: Callback) {

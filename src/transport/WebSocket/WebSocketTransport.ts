@@ -42,7 +42,7 @@ export class WebSocketTransport extends Transport {
 
     this.pingIntervalMS = (options.pingInterval !== undefined)
       ? options.pingInterval
-      : 1500;
+      : 3000;
     this.pingMaxRetries = (options.pingMaxRetries !== undefined)
       ? options.pingMaxRetries
       : 2;
@@ -66,6 +66,13 @@ export class WebSocketTransport extends Transport {
     clearInterval(this.pingInterval);
     this.wss.close();
     this.server.close();
+  }
+
+  public simulateLatency(milliseconds: number) {
+    const previousSend = WebSocket.prototype.send;
+    WebSocket.prototype.send = function(...args: any[]) {
+      setTimeout(() => previousSend.apply(this, args), milliseconds);
+    };
   }
 
   protected autoTerminateUnresponsiveClients(pingInterval: number, pingMaxRetries: number) {
@@ -100,18 +107,22 @@ export class WebSocketTransport extends Transport {
     const processAndRoomId = parsedURL.pathname.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-]+)$/);
     const roomId = processAndRoomId && processAndRoomId[1];
 
-    const room = matchMaker.getRoomById(roomId);
+    // jyhan
+    let client
+    let room = matchMaker.getRoomById(roomId);
+    if ( !room )
+      room = await matchMaker.createRoomInstance(roomId)
 
     // set client id
     rawClient.pingCount = 0;
 
-    const client = new WebSocketClient(sessionId, rawClient);
-
     try {
-      if (!room || !room.hasReservedSeat(sessionId)) {
+      // jyhan
+      if (!room) { // || !room.hasReservedSeat(sessionId)) {
         throw new Error('seat reservation expired.');
       }
 
+      client = new WebSocketClient(sessionId, rawClient);
       await room._onJoin(client, upgradeReq);
 
     } catch (e) {

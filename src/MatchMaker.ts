@@ -1,25 +1,24 @@
-import { ErrorCode } from './Protocol';
+import {ErrorCode} from './Protocol';
 
-import { requestFromIPC, subscribeIPC } from './IPC';
-import { generateId, merge, REMOTE_ROOM_SHORT_TIMEOUT, retry } from './Utils';
+import {requestFromIPC, subscribeIPC} from './IPC';
+import {generateId, merge, REMOTE_ROOM_SHORT_TIMEOUT, retry} from './Utils';
 
-import { RegisteredHandler } from './matchmaker/RegisteredHandler';
-import { Room, RoomInternalState } from './Room';
+import {RegisteredHandler} from './matchmaker/RegisteredHandler';
+import {Room, RoomInternalState} from './Room';
 
-import { LocalPresence } from './presence/LocalPresence';
-import { Presence } from './presence/Presence';
+import {LocalPresence} from './presence/LocalPresence';
+import {Presence} from './presence/Presence';
 
-import { debugAndPrintError, debugMatchMaking } from './Debug';
-import { SeatReservationError } from './errors/SeatReservationError';
-import { ServerError } from './errors/ServerError';
-import { MatchMakerDriver, RoomListingData } from './matchmaker/drivers/Driver';
-import { LocalDriver } from './matchmaker/drivers/LocalDriver';
-import { Client } from './transport/Transport';
-import { Type } from './types';
-import ip from "internal-ip";
-import {RoomCache} from "./matchmaker/drivers/LocalDriver/RoomData";
+import {debugAndPrintError, debugMatchMaking} from './Debug';
+import {SeatReservationError} from './errors/SeatReservationError';
+import {ServerError} from './errors/ServerError';
+import {MatchMakerDriver, RoomListingData} from './matchmaker/drivers/Driver';
+import {LocalDriver} from './matchmaker/drivers/LocalDriver';
+import {Client} from './transport/Transport';
+import {Type} from './types';
+import {RedisPresence} from "./presence/RedisPresence";
 
-export { MatchMakerDriver };
+export {MatchMakerDriver};
 
 export type ClientOptions = any;
 
@@ -28,24 +27,18 @@ export interface SeatReservation {
   room: RoomListingData;
 }
 
-const handlers: {[id: string]: RegisteredHandler} = {};
-const rooms: {[roomId: string]: Room} = {};
+const handlers: { [id: string]: RegisteredHandler } = {};
+const rooms: { [roomId: string]: Room } = {};
 
 export let processId: string;
 export let presence: Presence;
 export let driver: MatchMakerDriver;
-// jyhan
-export let serverIp
-export let serverPort
 
 let isGracefullyShuttingDown: boolean;
 
 export function setup(_presence?: Presence, _driver?: MatchMakerDriver, _processId?: string) {
   presence = _presence || new LocalPresence();
   driver = _driver || new LocalDriver();
-  // jyhan
-  serverIp = ip.v4.sync()
-  serverPort = process.env.GAMESERVER_PORT
   processId = _processId;
   isGracefullyShuttingDown = false;
 
@@ -101,7 +94,7 @@ export async function join(roomName: string, options: ClientOptions = {}) {
  * Join a room by id and return seat reservation
  */
 export async function joinById(roomId: string, options: ClientOptions = {}) {
-  const room = await driver.findOne({ roomId });
+  const room = await driver.findOne({roomId});
 
   if (room) {
     const rejoinSessionId = options.sessionId;
@@ -111,7 +104,7 @@ export async function joinById(roomId: string, options: ClientOptions = {}) {
       const hasReservedSeat = await remoteRoomCall(room.roomId, 'hasReservedSeat', [rejoinSessionId]);
 
       if (hasReservedSeat) {
-        return { room, sessionId: rejoinSessionId };
+        return {room, sessionId: rejoinSessionId};
 
       } else {
         throw new ServerError(ErrorCode.MATCHMAKE_EXPIRED, `session expired: ${rejoinSessionId}`);
@@ -122,12 +115,12 @@ export async function joinById(roomId: string, options: ClientOptions = {}) {
       return reserveSeatFor(room, options);
 
     } else {
-      throw new ServerError( ErrorCode.MATCHMAKE_INVALID_ROOM_ID, `room "${roomId}" is locked`);
+      throw new ServerError(ErrorCode.MATCHMAKE_INVALID_ROOM_ID, `room "${roomId}" is locked`);
 
     }
 
   } else {
-    throw new ServerError( ErrorCode.MATCHMAKE_INVALID_ROOM_ID, `room "${roomId}" not found`);
+    throw new ServerError(ErrorCode.MATCHMAKE_INVALID_ROOM_ID, `room "${roomId}" not found`);
   }
 
 }
@@ -146,7 +139,7 @@ export async function findOneRoomAvailable(roomName: string, options: ClientOpti
   return await awaitRoomAvailable(roomName, async () => {
     const handler = handlers[roomName];
     if (!handler) {
-      throw new ServerError( ErrorCode.MATCHMAKE_NO_HANDLER, `provided room name "${roomName}" not defined`);
+      throw new ServerError(ErrorCode.MATCHMAKE_NO_HANDLER, `provided room name "${roomName}" not defined`);
     }
 
     const roomQuery = driver.findOne({
@@ -167,7 +160,7 @@ export async function findOneRoomAvailable(roomName: string, options: ClientOpti
 /**
  * Call a method or return a property on a remote room.
  */
-export async function remoteRoomCall<R= any>(
+export async function remoteRoomCall<R = any>(
   roomId: string,
   method: string,
   args?: any[],
@@ -189,8 +182,8 @@ export async function remoteRoomCall<R= any>(
 
   } else {
     return (!args && typeof (room[method]) !== 'function')
-        ? room[method]
-        : (await room[method].apply(room, args));
+      ? room[method]
+      : (await room[method].apply(room, args));
   }
 }
 
@@ -214,7 +207,7 @@ export function removeRoomType(name: string) {
 }
 
 export function hasHandler(name: string) {
-  return handlers[ name ] !== undefined;
+  return handlers[name] !== undefined;
 }
 
 /**
@@ -223,14 +216,27 @@ export function hasHandler(name: string) {
 export async function createRoom(roomName: string, clientOptions: ClientOptions): Promise<RoomListingData> {
   const roomsSpawnedByProcessId = await presence.hgetall(getRoomCountKey());
 
+  // jyhan
+  // 현재 접속되어 있지 않은 클라이언트를 제외한다
+  let roomsSpawnedByProcessId_keys = Object.keys(roomsSpawnedByProcessId)
+  if (presence instanceof RedisPresence) {
+    let clientList: string = await presence.clientAsync('LIST')
+    let clientNameList = clientList.split('\n').filter(v => v).map((v) => {
+      let fields = v.split(' ')
+      return fields[3].split('=')[1]
+    })
+    roomsSpawnedByProcessId_keys = roomsSpawnedByProcessId_keys.filter(v => clientNameList.indexOf(v) >= 0)
+  }
+
   const processIdWithFewerRooms = (
-    Object.keys(roomsSpawnedByProcessId).sort((p1, p2) => {
+    roomsSpawnedByProcessId_keys.sort((p1, p2) => {
       return (Number(roomsSpawnedByProcessId[p1]) > Number(roomsSpawnedByProcessId[p2]))
         ? 1
         : -1;
     })[0]
   ) || processId;
 
+  /*
   if (processIdWithFewerRooms === processId) {
     // create the room on this process!
     return await handleCreateRoom(roomName, clientOptions);
@@ -253,16 +259,96 @@ export async function createRoom(roomName: string, clientOptions: ClientOptions)
       debugAndPrintError(e);
       room = await handleCreateRoom(roomName, clientOptions);
     }
-
     return room;
   }
+  */
+
+  // 룸 리스팅만 만들어놓고 룸은 나중에 접속시 실시간으로 만듬
+  return await createRoomListing(roomName, clientOptions)
 }
 
-async function handleCreateRoom(roomName: string, clientOptions: ClientOptions): Promise<RoomListingData|RoomCache> {
+async function createRoomListing(roomName, clientOptions): Promise<RoomListingData> {
   const registeredHandler = handlers[roomName];
 
   if (!registeredHandler) {
-    throw new ServerError( ErrorCode.MATCHMAKE_NO_HANDLER, `provided room name "${roomName}" not defined`);
+    throw new ServerError(ErrorCode.MATCHMAKE_NO_HANDLER, `provided room name "${roomName}" not defined`);
+  }
+
+  const room = new registeredHandler.klass();
+
+  return driver.createInstance({
+    name: roomName,
+    roomId: generateId,
+    maxClients: room.maxClients,
+    processId,
+    ...registeredHandler.getFilterOptions(clientOptions),
+  });
+}
+
+export async function createRoomInstance(roomId) {
+  let room_listing = await driver.findOne({
+    roomId,
+  });
+
+  if (!room_listing)
+    return null
+
+  let roomName = room_listing.name
+  const registeredHandler = handlers[roomName];
+
+  if (!registeredHandler) {
+    throw new ServerError(ErrorCode.MATCHMAKE_NO_HANDLER, `provided room name "${roomName}" not defined`);
+  }
+
+  let room = new registeredHandler.klass();
+  let clientOptions = { ...registeredHandler.getFilterOptions(room_listing) }
+
+  room.roomId = roomId
+  room.roomName = roomName
+  room.presence = presence
+  room.listing = room_listing
+
+  if (room.onCreate) {
+    try {
+      await room.onCreate(merge({}, clientOptions, registeredHandler.options));
+
+      // increment amount of rooms this process is handling
+      presence.hincrby(getRoomCountKey(), processId, 1);
+
+    } catch (e) {
+      debugAndPrintError(e);
+      throw new ServerError(
+        e.code || ErrorCode.MATCHMAKE_UNHANDLED,
+        e.message,
+      );
+    }
+  }
+
+  room.internalState = RoomInternalState.CREATED;
+
+  // imediatelly ask client to join the room
+  debugMatchMaking('spawning \'%s\', roomId: %s, processId: %s', roomName, room.roomId, processId);
+
+  room._events.on('lock', lockRoom.bind(this, room));
+  room._events.on('unlock', unlockRoom.bind(this, room));
+  room._events.on('join', onClientJoinRoom.bind(this, room));
+  room._events.on('leave', onClientLeaveRoom.bind(this, room));
+  room._events.once('dispose', disposeRoom.bind(this, roomName, room));
+  room._events.once('disconnect', () => room._events.removeAllListeners());
+
+  // room always start unlocked
+  await createRoomReferences(room, true);
+
+  registeredHandler.emit('create', room);
+
+  return room;
+}
+
+async function handleCreateRoom(roomName: string, clientOptions: ClientOptions): Promise<RoomListingData> {
+  const registeredHandler = handlers[roomName];
+
+  if (!registeredHandler) {
+    throw new ServerError(ErrorCode.MATCHMAKE_NO_HANDLER, `provided room name "${roomName}" not defined`);
   }
 
   const room = new registeredHandler.klass();
@@ -276,9 +362,6 @@ async function handleCreateRoom(roomName: string, clientOptions: ClientOptions):
   room.listing = driver.createInstance({
     name: roomName,
     processId,
-    // jyhan
-    serverIp,
-    serverPort,
     ...registeredHandler.getFilterOptions(clientOptions),
   });
 
@@ -378,7 +461,7 @@ export async function reserveSeatFor(room: RoomListingData, options: any) {
     throw new SeatReservationError(`${room.roomId} is already full.`);
   }
 
-  return { room, sessionId };
+  return {room, sessionId};
 }
 
 async function cleanupStaleRooms(roomName: string) {
@@ -386,7 +469,7 @@ async function cleanupStaleRooms(roomName: string) {
   // clean-up possibly stale room ids
   // (ungraceful shutdowns using Redis can result on stale room ids still on memory.)
   //
-  const cachedRooms = await driver.find({ name: roomName }, { _id: 1 });
+  const cachedRooms = await driver.find({name: roomName}, {_id: 1});
 
   // remove connecting counts
   await presence.del(getHandlerConcurrencyKey(roomName));

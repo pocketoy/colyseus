@@ -9,6 +9,8 @@ import { EventEmitter } from 'events';
 
 import { Presence } from './presence/Presence';
 
+import { FossilDeltaSerializer } from './serializer/FossilDeltaSerializer';
+import { NoneSerializer } from './serializer/NoneSerializer';
 import { SchemaSerializer } from './serializer/SchemaSerializer';
 import { Serializer } from './serializer/Serializer';
 
@@ -18,14 +20,13 @@ import { Deferred, spliceOne } from './Utils';
 import { debugAndPrintError, debugPatch } from './Debug';
 import { ServerError } from './errors/ServerError';
 import { RoomListingData } from './matchmaker/drivers/Driver';
-import { FossilDeltaSerializer } from './serializer/FossilDeltaSerializer';
 import { Client, ClientState, ISendOptions } from './transport/Transport';
 import {RoomCache} from "./matchmaker/drivers/LocalDriver/RoomData";
 
 const DEFAULT_PATCH_RATE = 1000 / 20; // 20fps (50ms)
 const DEFAULT_SIMULATION_INTERVAL = 1000 / 60; // 60fps (16.66ms)
 
-export const DEFAULT_SEAT_RESERVATION_TIME = Number(process.env.COLYSEUS_SEAT_RESERVATION_TIME || 8);
+export const DEFAULT_SEAT_RESERVATION_TIME = Number(process.env.COLYSEUS_SEAT_RESERVATION_TIME || 15);
 
 export type SimulationCallback = (deltaTime: number) => void;
 
@@ -79,7 +80,7 @@ export abstract class Room<State= any, Metadata= any> {
 
   private onMessageHandlers: {[id: string]: (client: Client, message: any) => void} = {};
 
-  private _serializer: Serializer<State> = new FossilDeltaSerializer();
+  private _serializer: Serializer<State> = new NoneSerializer();
   private _afterNextPatchBroadcasts: IArguments[] = [];
 
   private _simulationInterval: NodeJS.Timer;
@@ -131,35 +132,34 @@ export abstract class Room<State= any, Metadata= any> {
     return this.reservedSeats[sessionId] !== undefined;
   }
 
-  public setSimulationInterval( callback: SimulationCallback, delay: number = DEFAULT_SIMULATION_INTERVAL ): void {
+  public setSimulationInterval(onTickCallback?: SimulationCallback, delay: number = DEFAULT_SIMULATION_INTERVAL): void {
     // clear previous interval in case called setSimulationInterval more than once
-    if ( this._simulationInterval ) { clearInterval( this._simulationInterval ); }
+    if (this._simulationInterval) { clearInterval(this._simulationInterval); }
 
-    this._simulationInterval = setInterval( () => {
-      this.clock.tick();
-      callback(this.clock.deltaTime);
-    }, delay );
+    if (onTickCallback) {
+      this._simulationInterval = setInterval(() => {
+        this.clock.tick();
+        onTickCallback(this.clock.deltaTime);
+      }, delay);
+    }
   }
 
-  public setPatchRate( milliseconds: number ): void {
+  public setPatchRate(milliseconds: number): void {
     // clear previous interval in case called setPatchRate more than once
     if (this._patchInterval) {
       clearInterval(this._patchInterval);
       this._patchInterval = undefined;
     }
 
-    if ( milliseconds !== null && milliseconds !== 0 ) {
-      this._patchInterval = setInterval(() => {
-        this.broadcastPatch();
-        this.broadcastAfterPatch();
-      }, milliseconds);
+    if (milliseconds !== null && milliseconds !== 0) {
+      this._patchInterval = setInterval(() => this.broadcastPatch(), milliseconds);
     }
   }
 
   public setState(newState: State) {
     this.clock.start();
 
-    if ('_schema' in newState) {
+    if ('_definition' in newState) {
       this._serializer = new SchemaSerializer();
 
     } else {
@@ -302,10 +302,14 @@ export abstract class Room<State= any, Metadata= any> {
   public async ['_onJoin'](client: Client, req?: http.IncomingMessage) {
     const sessionId = client.sessionId;
 
+    /*
+    // jyhan
+    // reserve 없이도 접속 가능하도록 변경
     if (this.reservedSeatTimeouts[sessionId]) {
       clearTimeout(this.reservedSeatTimeouts[sessionId]);
       delete this.reservedSeatTimeouts[sessionId];
     }
+     */
 
     // clear auto-dispose timeout.
     if (this._autoDisposeTimeout) {
@@ -314,8 +318,12 @@ export abstract class Room<State= any, Metadata= any> {
     }
 
     // get seat reservation options and clear it
+    /*
+    // jyhan
+    // reserve 없이도 접속 가능하도록 변경
     const options = this.reservedSeats[sessionId];
     delete this.reservedSeats[sessionId];
+     */
 
     // bind clean-up callback when client connection closes
     client.ref.once('close', this._onLeave.bind(this, client));
@@ -420,6 +428,24 @@ export abstract class Room<State= any, Metadata= any> {
     }, timeoutInSeconds * 1000);
   }
 
+  protected broadcastPatch() {
+    if (!this._simulationInterval) {
+      this.clock.tick();
+    }
+
+    if (!this.state) {
+      debugPatch('trying to broadcast null state. you should call #setState');
+      return false;
+    }
+
+    const hasChanges = this._serializer.applyPatches(this.clients, this.state);
+
+    // broadcast messages enqueued for "after patch"
+    this.broadcastAfterPatch();
+
+    return hasChanges;
+  }
+
   private broadcastMessageSchema<T extends Schema>(message: T, options: IBroadcastOptions = {}) {
     const encodedMessage = getMessageBytes[Protocol.ROOM_DATA_SCHEMA](message);
 
@@ -446,21 +472,8 @@ export abstract class Room<State= any, Metadata= any> {
     }
   }
 
-  private sendState(client: Client): void {
+  private sendFullState(client: Client): void {
     client.enqueueRaw(getMessageBytes[Protocol.ROOM_STATE](this._serializer.getFullState(client)));
-  }
-
-  private broadcastPatch(): boolean {
-    if (!this._simulationInterval) {
-      this.clock.tick();
-    }
-
-    if (!this.state) {
-      debugPatch('trying to broadcast null state. you should call #setState');
-      return false;
-    }
-
-    return this._serializer.applyPatches(this.clients, this.state);
   }
 
   private broadcastAfterPatch() {
@@ -549,6 +562,9 @@ export abstract class Room<State= any, Metadata= any> {
   }
 
   private _onMessage(client: Client, bytes: number[]) {
+    // skip if client is on LEAVING state.
+    if (client.state === ClientState.LEAVING) { return; }
+
     const it: decode.Iterator = { offset: 0 };
     const code = decode.uint8(bytes, it);
 
@@ -582,7 +598,7 @@ export abstract class Room<State= any, Metadata= any> {
 
       // send current state when new client joins the room
       if (this.state) {
-        this.sendState(client);
+        this.sendFullState(client);
       }
 
       // dequeue messages sent before client has joined effectively (on user-defined `onJoin`)
@@ -617,6 +633,7 @@ export abstract class Room<State= any, Metadata= any> {
     // call 'onLeave' method only if the client has been successfully accepted.
     if (success && this.onLeave) {
       try {
+        client.state = ClientState.LEAVING;
         await this.onLeave(client, (code === Protocol.WS_CLOSE_CONSENTED));
 
       } catch (e) {
