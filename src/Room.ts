@@ -309,7 +309,7 @@ export abstract class Room<State= any, Metadata= any> {
       clearTimeout(this.reservedSeatTimeouts[sessionId]);
       delete this.reservedSeatTimeouts[sessionId];
     }
-     */
+    */
 
     // clear auto-dispose timeout.
     if (this._autoDisposeTimeout) {
@@ -323,9 +323,11 @@ export abstract class Room<State= any, Metadata= any> {
     // reserve 없이도 접속 가능하도록 변경
     const options = this.reservedSeats[sessionId];
     delete this.reservedSeats[sessionId];
-     */
+    */
 
-    // bind clean-up callback when client connection closes
+    const options = this.listing
+
+      // bind clean-up callback when client connection closes
     client.ref.once('close', this._onLeave.bind(this, client));
 
     this.clients.push(client);

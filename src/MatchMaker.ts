@@ -45,9 +45,13 @@ export function setup(_presence?: Presence, _driver?: MatchMakerDriver, _process
   /**
    * Subscribe to remote `handleCreateRoom` calls.
    */
+  /*
+  // jyhan
+  // 더이상 IPC 콜은 사용하지 않는다
   subscribeIPC(presence, processId, getProcessChannel(), (_, args) => {
     return handleCreateRoom.apply(undefined, args);
   });
+   */
 
   presence.hset(getRoomCountKey(), processId, '0');
 }
